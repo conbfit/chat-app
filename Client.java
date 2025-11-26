@@ -3,30 +3,76 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 
 public class Client implements Runnable{
     private Socket client;
     private BufferedReader in;
     private PrintWriter out;
     private boolean done;
+    private byte[] sessionKey;
+    private PrivateKey dhPrivateKey;
 @Override
     public void run() {
         try {
-            Socket client = new Socket("localhost", 9999);
+            client = new Socket("localhost", 9999);
             out = new PrintWriter(client.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-            InputHandler inputHandler = new InputHandler();
+
+            KeyPair clientKp = CryptoUtil.generateKeyPair();
+            dhPrivateKey = clientKp.getPrivate();
+            String clientPubKeyB64 = CryptoUtil.publicKeyToBase64(clientKp.getPublic());
+            out.println("DHINIT:" + clientPubKeyB64);   
+
+            String respLine = in.readLine();
+            if (respLine != null && respLine.startsWith("DHRESP:")) {
+                String serverPubKeyB64 = respLine.substring("DHRESP:".length());
+                PublicKey serverPubKey = CryptoUtil.publicKeyFromBase64X25519(serverPubKeyB64);
+                
+                sessionKey = CryptoUtil.deriveAesKeyFromKeypair(dhPrivateKey, serverPubKey);
+                System.out.println("DH handshake completed with server.");
+            }
+            
+            String nicknamePrompt = in.readLine();
+            System.out.println(nicknamePrompt);
+
+            BufferedReader consoleIn = new BufferedReader(new InputStreamReader(System.in));
+            String nickname = consoleIn.readLine();
+            out.println(nickname);
+            
+            InputHandler inputHandler = new InputHandler(consoleIn);
             Thread t = new Thread(inputHandler);
             t.start();
 
             String inMessage;
             while ((inMessage = in.readLine()) != null) {
-                System.out.println(inMessage);
+                String decrypted = decryptMessage(inMessage);
+                System.out.println(decrypted);
             }
-        } catch (IOException e) {
+        } catch (IOException | GeneralSecurityException e) {
             shutdown();
         }
     }
+    private void sendEncrypted(String plaintext) throws GeneralSecurityException {
+    if (sessionKey == null) {
+        out.println(plaintext); // fallback
+    } else {
+        String encrypted = "ENC:" + CryptoUtil.aesGcmEncryptBase64(sessionKey, plaintext);
+        out.println(encrypted);
+    }
+}
+
+private String decryptMessage(String line) throws GeneralSecurityException {
+    if (line == null || !line.startsWith("ENC:")) {
+        return line; // plaintext fallback
+    }
+    String b64Ciphertext = line.substring("ENC:".length());
+    return CryptoUtil.aesGcmDecryptBase64(sessionKey, b64Ciphertext);
+}
+
     public void shutdown() {
         done = true;
         try {
@@ -41,10 +87,15 @@ public class Client implements Runnable{
     }
 
     class InputHandler implements Runnable {
+        private BufferedReader consoleIn;
+        
+        public InputHandler(BufferedReader consoleIn) {
+            this.consoleIn = consoleIn;
+        }
+        
         @Override
         public void run() {
             try {
-                BufferedReader consoleIn = new BufferedReader(new InputStreamReader(System.in));
                 while (!done) {
                     String message = consoleIn.readLine();
                     if (message.equals("/quit")) {
@@ -52,7 +103,11 @@ public class Client implements Runnable{
                         consoleIn.close();
                         shutdown();
                     } else {
-                        out.println(message);
+                        try {
+                            sendEncrypted(message);
+                        } catch (GeneralSecurityException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
             } catch (IOException e) {
