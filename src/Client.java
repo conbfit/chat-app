@@ -26,7 +26,7 @@ public class Client implements Runnable{
             KeyPair clientKp = CryptoUtil.generateKeyPair();
             dhPrivateKey = clientKp.getPrivate();
             String clientPubKeyB64 = CryptoUtil.publicKeyToBase64(clientKp.getPublic());
-            out.println("DHINIT:" + clientPubKeyB64);   
+            out.println("DHINIT:" + clientPubKeyB64);
 
             String respLine = in.readLine();
             if (respLine != null && respLine.startsWith("DHRESP:")) {
