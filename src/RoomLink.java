@@ -1,5 +1,4 @@
 import java.util.UUID;
-
 public class RoomLink {
 
 
@@ -14,6 +13,7 @@ public class RoomLink {
         this.id = id;
 
         //TODO get name from server
+
     }
 
     public void setLocalName(String localName) {

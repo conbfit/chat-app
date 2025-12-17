@@ -29,7 +29,7 @@ public class Server implements Runnable {
     @Override
     public void run() {
         try {
-            server = new ServerSocket(9999);
+            server = new ServerSocket(9999); //local
             pool = Executors.newCachedThreadPool();
             while (!done) {
                 Socket client = server.accept();
