@@ -134,6 +134,7 @@ public class Server implements Runnable {
                         }
 
                     } else if (message.startsWith("/quit")) {
+                        System.out.println(nickname + " has disconnected.");
                         shutdown();
 
                     } else {
